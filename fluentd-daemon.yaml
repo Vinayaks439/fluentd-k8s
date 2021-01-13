@@ -27,7 +27,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: fluentd
-        image: gcr.io/ox-sigmoid-prod/fluent-custom:latest
+        image: <your-image>
         command: 
           - /bin/sh 
           - '-c'
