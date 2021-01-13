@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+  namespace: loki-grafana
+data:
+  fluent.conf: |-
+    @include pods-fluent.conf
+    @include loki-fluent.conf
+    @include gcs-fluent.conf
+  pods-fluent.conf: |-
+    <source>
+      @type tail
+      read_from_head true
+      tag kubernetes.*
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      exclude_path /var/log/containers/fluentd*
+      path_key filename
+      <parse>
+        @type none
+      </parse>
+    </source>
+
+    #########OPTIONAL################
+    # <filter kubernetes.**>
+    #   @type kubernetes_metadata
+    #   @id filter_kube_metadata
+    #   kubernetes_url "#{ENV['FLUENT_FILTER_KUBERNETES_URL'] || 'https://' + ENV.fetch('KUBERNETES_SERVICE_HOST') + ':' + ENV.fetch('KUBERNETES_SERVICE_PORT') + '/api'}"
+    #   verify_ssl "#{ENV['KUBERNETES_VERIFY_SSL'] || true}"
+    #   ca_file "#{ENV['KUBERNETES_CA_FILE']}"
+    #   skip_labels "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_LABELS'] || 'false'}"
+    #   skip_container_metadata "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_CONTAINER_METADATA'] || 'false'}"
+    #   skip_master_url "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_MASTER_URL'] || 'false'}"
+    #   skip_namespace_metadata "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_NAMESPACE_METADATA'] || 'false'}"
+    </filter>
+  loki-fluent.conf: |-
+    <match **>
+        @type loki
+        #### url of loki can be your loki-service inside the cluster or an external endpoint#############
+        url "http://loki:3100"
+        extra_labels {"env":"prod"}
+        <label>
+          filename
+        </label>
+        label_keys "app,job,namespace,pod"
+        extract_kubernetes_labels true
+        flush_interval 10s
+        flush_at_shutdown true
+        buffer_chuck_limit 1m
+    </match>
+  gcs-fluent.conf: |-
+    <match **>
+      @type gcs
+      
+      project <your-gcp-project>
+      keyfile "#{ENV['GCP_CRED']}"
+      bucket <BUCKET_NAME>
+      object_key_format %{path}%{time_slice}_%{index}.%{file_extension}
+      path logs/${tag}/%Y/%m/%d/
+
+      <buffer tag,time>
+        @type file
+        path /var/log/fluent/gcs
+        timekey 1h
+        timekey_wait 10min
+        timekey_use_utc true
+      </buffer>  
+    </match>
