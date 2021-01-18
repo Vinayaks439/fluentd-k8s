@@ -24,6 +24,8 @@ data:
     </source>
 
     #########OPTIONAL################
+    
+    ######## IF you un-comment this you will get kuberenetes_meta data metrics in your logs which can be annoying #########
     # <filter kubernetes.**>
     #   @type kubernetes_metadata
     #   @id filter_kube_metadata
