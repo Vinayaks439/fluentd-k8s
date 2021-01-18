@@ -18,7 +18,8 @@ data:
       exclude_path /var/log/containers/fluentd*
       path_key filename
       <parse>
-        @type none
+        @type json
+        time_type string
       </parse>
     </source>
 
