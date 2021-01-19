@@ -68,5 +68,6 @@ data:
         timekey 1h
         timekey_wait 10min
         timekey_use_utc true
+        flush_at_shutdown true
       </buffer>  
     </match>
