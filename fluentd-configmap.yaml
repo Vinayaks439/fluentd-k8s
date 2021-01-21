@@ -22,6 +22,27 @@ data:
         time_type string
       </parse>
     </source>
+    <match kubernetes.**>
+        @type google_cloud
+        buffer_type file
+        buffer_path /var/log/google-fluentd/buffers
+        buffer_chunk_limit 512KB
+        flush_interval 5s
+        disable_retry_limit false
+        retry_limit 3
+        retry_wait 10
+        max_retry_wait 300
+        num_threads 8
+        use_grpc true
+        partial_success true
+        enable_monitoring true
+        monitoring_type opencensus
+
+        output_file_name /var/log/gcs_aggregate.log
+        output_to_file true
+        output_to_gcp false
+        @log_level debug
+    </match>
 
     #########OPTIONAL################
     
@@ -53,7 +74,17 @@ data:
         buffer_chuck_limit 1m
     </match>
   gcs-fluent.conf: |-
-    <match **>
+  
+    <source>
+      @type tail
+      path /var/log/gcs_aggregate.log
+      pos_file /var/log/td-agent/gcs_aggregate.log.pos
+      tag gcpfile
+      <parse>
+        @type json
+      </parse>
+    </source>
+    <match gcpfile.**>
       @type gcs
       
       project <your-gcp-project>
