@@ -6,46 +6,55 @@ metadata:
 data:
   fluent.conf: |-
     @include pods-fluent.conf
-    @include loki-fluent.conf
-    @include gcs-fluent.conf
+    @include gcs-loki-fluent.conf
   pods-fluent.conf: |-
+    <label @FLUENT_LOG>
+        <match fluent.*>
+            @type null
+        </match>
+    </label>
     <source>
       @type tail
       read_from_head true
       tag kubernetes.*
       path /var/log/containers/*.log
       pos_file /var/log/fluentd-containers.log.pos
-      exclude_path /var/log/containers/fluentd*
-      path_key filename
+      exclude_path /var/log/containers/fluentd*.log
+      path_key filename_prod
       <parse>
         @type json
         time_type string
       </parse>
     </source>
-    <match kubernetes.**>
-        @type google_cloud
-        buffer_type file
-        buffer_path /var/log/google-fluentd/buffers
-        buffer_chunk_limit 512KB
-        flush_interval 5s
-        disable_retry_limit false
-        retry_limit 3
-        retry_wait 10
-        max_retry_wait 300
-        num_threads 8
-        use_grpc true
-        partial_success true
-        enable_monitoring true
-        monitoring_type opencensus
-
-        output_file_name /var/log/gcs_aggregate.log
-        output_to_file true
-        output_to_gcp false
-        @log_level debug
-    </match>
-
+    #<source>
+    #   @type tail
+    #   read_from_head true
+    #   tag service.*
+    #   path /var/log/containers/service-*.log
+    #   pos_file /var/log/service-containers.log.pos
+    #   path_key service_prod
+    #   <parse>
+    #      @type json
+    #      time_type string
+    #   </parse>
+    # </source>
+    #<filter service.**>
+    #  @type parser
+    #  key_name Object
+    #  reserve_data true
+    #  remove_key_name_field true
+    #  <parse>
+    #    @type multi_format
+    #    <pattern>
+    #       format json
+    #    </pattern>
+    #    <pattern>
+    #       format none
+    #    </pattern>
+    #  </parse>
+    #</filter>
     #########OPTIONAL################
-    
+
     ######## IF you un-comment this you will get kuberenetes_meta data metrics in your logs#########
     # <filter kubernetes.**>
     #   @type kubernetes_metadata
@@ -58,47 +67,46 @@ data:
     #   skip_master_url "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_MASTER_URL'] || 'false'}"
     #   skip_namespace_metadata "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_NAMESPACE_METADATA'] || 'false'}"
     #</filter>
-  loki-fluent.conf: |-
+  gcs-loki-fluent.conf: |-
     <match **>
-        @type loki
-        #### url of loki can be your loki-service inside the cluster or an external endpoint#############
-        url "http://loki:3100"
-        extra_labels {"env":"prod"}
-        <label>
-          filename
-        </label>
-        label_keys "app,job,namespace,pod"
-        extract_kubernetes_labels true
-        flush_interval 10s
-        flush_at_shutdown true
-        buffer_chuck_limit 1m
-    </match>
-  gcs-fluent.conf: |-
-  
-    <source>
-      @type tail
-      path /var/log/gcs_aggregate.log
-      pos_file /var/log/td-agent/gcs_aggregate.log.pos
-      tag gcpfile
-      <parse>
-        @type json
-      </parse>
-    </source>
-    <match gcpfile.**>
-      @type gcs
-      
-      project <your-gcp-project>
-      keyfile "#{ENV['GCP_CRED']}"
-      bucket <BUCKET_NAME>
-      object_key_format %{path}%{time_slice}_%{index}.%{file_extension}
-      path logs/${tag}/%Y/%m/%d/
+      @type copy
+      <store>
+        @type gcs
 
-      <buffer tag,time>
-        @type file
-        path /var/log/fluent/gcs
-        timekey 1h
-        timekey_wait 10min
-        timekey_use_utc true
-        flush_at_shutdown true
-      </buffer>  
+        project "#{ENV['GCS_BUCKET_PROJECT']}"
+        keyfile "#{ENV['GCP_CRED']}"
+        bucket "#{ENV['GCS_BUCKET_NAME']}"
+        object_key_format %{path}%{time_slice}_%{index}.%{file_extension}
+        path prod_logs/${tag}/%Y/%m/%d/
+
+         <buffer tag,time>
+            @type file
+            path /var/log/fluent/gcs
+            timekey 1h
+            timekey_wait 10min
+            timekey_use_utc true
+            flush_at_shutdown true
+         </buffer>
+         <format>
+            @type json
+         </format>
+      </store>
+      <store>
+        @type loki
+        #######------Your Remote loki-----#######
+        url "http://10.451.1.0:3100"
+        extra_labels {"cluster":"prod"}
+        <label>
+          filename_prod
+        </label>
+        extract_kubernetes_labels true
+        <buffer time,tag>
+          flush_at_shutdown true
+          flush_mode interval
+          flush_interval 10
+          timekey 20
+          timekey_wait 60
+          chunk_limit_size 60MB
+        </buffer>
+      </store>
     </match>
